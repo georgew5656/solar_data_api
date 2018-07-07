@@ -47,5 +47,9 @@ def load(year):
             processed_data_collection.insert(processed_data_models)
 
 
+@manager.command
+def runserver():
+    api.run()
+
 if __name__ == '__main__':
     manager.run()

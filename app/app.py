@@ -36,5 +36,3 @@ def processed_data():
     return json.dumps(datapoints)
 
 
-if __name__ == '__main__':
-    api.run()
