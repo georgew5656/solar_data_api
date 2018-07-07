@@ -1,49 +1,50 @@
-from db.models import SolarDataBiHourly, SolarDataDaily, SolarDataBiHourlyRaw, SolarDataDailyRaw
-import pymodm
-import sys
 from flask_script import Manager
 import os
 from app.app import api
 import json
-import datetime
+from pymongo import MongoClient
+from datetime import datetime
 
 manager = Manager(api)
+processed_data_fields = ['percentage_variability_per_day', 'max_ramp_30_min', 'max_ramp_60_min']
+raw_data_fields = ['GHI', 'DNI', 'Temperature', 'Wind Speed', 'generation',
+                   'Solar Zenith Angle', 'DHI', 'capacity_factor']
 
+client = MongoClient()
+client.connect('localhost', 27017)
 
 @manager.command
-def load():
-    if len(sys.argv < 2):
-        print("Please enter a year of data to add to the database")
-    pymodm.connect("mongodb://localhost:27017/solar_data")
-
-    connection_path = "../solar_data/geojson_files/2012" #should take this as a argument
+def load(year):
+    db = client.solar_data
+    raw_data_collection = db.raw_data
+    processed_data_collection = db.processed_data
+    # should take this as a argument
+    connection_path = "../solar_data/geojson_files/" + str(year)
     filenames = os.listdir(connection_path)
-    day_interval = 24 * 2
-    for filename in filenames:
-        with open (connection_path + '/' + filename) as f:
+    for j, filename in enumerate(filenames):
+        print(j)
+        with open(connection_path + '/' + filename) as f:
             data = json.load(f)
             location = filename.split(',')
             timeseries = data['Time_series']
+            raw_data_models = []
+            processed_data_models = []
             for i in range(len(timeseries['DateTime'])):
-                day_date = timeseries['DateTime'].split(' ')
-                if i % day_interval == 0:
-                    raw_data_daily = SolarDataDailyRaw(timeseries['max_ramp_30_min'][int(i / day_interval)],
-                                                       timeseries['max_ramp_60_min'][int(i / day_interval)],
-                                                       timeseries['percentage_variability_per_day'][int(i / day_interval)])
-                    data_daily = SolarDataDaily(datetime.date(2012, day_date[0], day_date[1]), location[0], location[1], raw_data_daily)
-                    data_daily.save()
-                raw_data_bihourly = SolarDataBiHourlyRaw(timeseries['GHI'][i],
-                                                         timeseries['DNI'][i],
-                                                         timeseries['generation'][i],
-                                                         timeseries['Solar Zenith Angle'][i],
-                                                         timeseries['DHI'][i],
-                                                         timeseries['capacity_factor'][i],
-                                                         timeseries['Temperature'][i],
-                                                         timeseries['Wind Speed'][i])
-                data_bihourly = SolarDataBiHourly(datetime.datetime(2012, day_date[0], day_date[1],
-                                                                    int((i % day_interval)/2), i % 2 * 30),
-                                                  location[0], location[1], raw_data_bihourly)
-                data_bihourly.save()
+                processed_data = {}
+                raw_data = {}
+                time_key = timeseries['DateTime'][i]
+                spatial_data = {'datetime': datetime.strptime(time_key, "%B %d @ %H:%M").replace(year=int(year)),
+                                'latitude': location[0], 'longitude': location[1]}
+                for processed_data_name in processed_data_fields:
+                    if time_key in timeseries[processed_data_name]:
+                        processed_data[processed_data_name] = timeseries[processed_data_name][time_key]
+                for raw_data_name in raw_data_fields:
+                    if time_key in timeseries[raw_data_name]:
+                        raw_data[raw_data_name] = timeseries[raw_data_name][time_key]
+                raw_data_models.append(dict(raw_data, **spatial_data))
+                processed_data_models.append(dict(processed_data, **spatial_data))
+            raw_data_collection.insert(raw_data_models)
+            processed_data_collection.insert(processed_data_models)
 
 
 if __name__ == '__main__':
