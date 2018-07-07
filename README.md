@@ -19,6 +19,10 @@ Processed Data:
 Fields Returned- percentage_variability_per_day, max_ramp_30_min, max_ramp_60_min
 
 
+Datapoints:
+Given min_latitude, max_latitude, min_longitude, max_longitude, return a list of the available data points inside the data box.
+
+
 Call API with following Params:
 
 latitude
